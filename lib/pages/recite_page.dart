@@ -329,6 +329,7 @@ class _RecitePageState extends State<RecitePage> {
   }
 
   /// 完成当前难度所有句子后，提示是否切换到下一难度
+  /// 无论用户选择什么，都会回到文章开头
   void _showDifficultyCompleteDialog() {
     if (_difficulty >= 4) {
       // 已经是最高难度
@@ -338,7 +339,13 @@ class _RecitePageState extends State<RecitePage> {
           title: const Text('恭喜！'),
           content: const Text('你已完成最高难度（等级4）的全部句子！\n可以标记熟练后退出，或继续复习。'),
           actions: [
-            FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('继续')),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _resetToStart();
+              },
+              child: const Text('继续'),
+            ),
           ],
         ),
       );
@@ -352,7 +359,10 @@ class _RecitePageState extends State<RecitePage> {
         content: Text('你已完成难度 $_difficulty 的全部句子！\n是否切换到难度 $nextDifficulty（提示更少）？'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _resetToStart();
+            },
             child: const Text('继续当前难度'),
           ),
           FilledButton(
@@ -364,11 +374,27 @@ class _RecitePageState extends State<RecitePage> {
                 _renderedCache.clear();
                 _refreshCandidates();
               });
+              _resetToStart();
             },
             child: Text('切换到难度 $nextDifficulty'),
           ),
         ],
       ),
+    );
+  }
+
+  /// 回到文章开头（第一句）
+  void _resetToStart() {
+    setState(() {
+      _activePos = 0;
+      _revealed = false;
+      _refreshCandidates();
+    });
+    // 滚动到顶部
+    _scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
     );
   }
 
