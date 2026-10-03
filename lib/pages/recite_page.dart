@@ -106,86 +106,52 @@ class _RecitePageState extends State<RecitePage> {
     );
   }
 
-  /// 刷新备选字：确保当前第一个空白的答案字一定在备选字中
-  /// 保证备选字至少 6 个，不足时从其他句/常用汉字中补充
+  /// 刷新备选字：从当前句随机抽字，不足从全文补充，随机位置放入正确答案
   void _refreshCandidates() {
     final rendered = _rendered(_activeSentenceIndex);
-    // 找到当前第一个未填入的空白槽位的答案字（必须包含）
+    final random = Random(DateTime.now().microsecondsSinceEpoch);
+
+    // 找到当前第一个未填入的空白槽位的答案字
     final nextBlank = rendered.tokens.firstWhere(
       (t) => t.isBlank && !t.filled,
       orElse: () => SentenceToken(),
     );
     final mustHave = nextBlank.isBlank ? nextBlank.answer : '';
 
-    // 收集所有未填入的空白槽位的答案字（去重）
-    final allAnswers = <String>{};
-    for (final t in rendered.tokens) {
-      if (t.isBlank && !t.filled) {
-        allAnswers.add(t.answer);
+    // 从当前句收集汉字（去重）
+    final sentenceChars = <String>{};
+    for (final ch in _poem.sentences[_activeSentenceIndex].characters) {
+      final code = ch.codeUnitAt(0);
+      if (code >= 0x4E00 && code <= 0x9FFF) {
+        sentenceChars.add(ch);
       }
     }
 
-    // 使用真正随机种子打乱，保证每次刷新顺序不同
-    final random = Random(DateTime.now().microsecondsSinceEpoch);
-    final shuffled = allAnswers.toList()..shuffle(random);
-
-    // 确保正确答案一定在备选字中（如果不在，随机替换一个）
-    final candidates = <String>[];
-    if (mustHave.isNotEmpty) {
-      if (shuffled.contains(mustHave)) {
-        // 正确答案在打乱后的列表中，直接取前 5 个（包含正确答案）
-        candidates.addAll(shuffled.take(5));
-      } else {
-        // 正确答案不在前 5 个，随机替换一个位置
-        final replacePos = random.nextInt(min(5, shuffled.length));
-        candidates.addAll(shuffled.take(5));
-        candidates[replacePos] = mustHave;
-      }
-    } else {
-      candidates.addAll(shuffled.take(5));
-    }
-
-    // 不足 6 个时，从其他句的答案字中补充干扰字
-    if (candidates.length < 6) {
-      final distractors = _getDistractorChars(allAnswers);
-      candidates.addAll(distractors.take(6 - candidates.length));
-    }
-
-    // 仍然不足 6 个时，从常用汉字中补充
-    if (candidates.length < 6) {
-      final commonChars = _getCommonChineseChars(candidates.toSet());
-      candidates.addAll(commonChars.take(6 - candidates.length));
-    }
-
-    // 最终打乱，确保正确答案位置不固定
-    candidates.shuffle(random);
-    _candidateChars = candidates;
-  }
-
-  /// 获取干扰字：从其他句的答案字中随机选取，排除已有答案字
-  List<String> _getDistractorChars(Set<String> exclude) {
-    final allChars = <String>{};
-    for (var i = 0; i < _poem.sentences.length; i++) {
-      if (i == _activeSentenceIndex) continue;
-      for (final ch in _poem.sentences[i].characters) {
-        final code = ch.codeUnitAt(0);
-        if (code >= 0x4E00 && code <= 0x9FFF && !exclude.contains(ch)) {
-          allChars.add(ch);
+    // 如果当前句汉字不足 6 个，从全文补充
+    if (sentenceChars.length < 6) {
+      for (var i = 0; i < _poem.sentences.length; i++) {
+        if (i == _activeSentenceIndex) continue;
+        for (final ch in _poem.sentences[i].characters) {
+          final code = ch.codeUnitAt(0);
+          if (code >= 0x4E00 && code <= 0x9FFF) {
+            sentenceChars.add(ch);
+          }
         }
+        if (sentenceChars.length >= 6) break;
       }
     }
-    final list = allChars.toList()..shuffle(Random(_activeSentenceIndex * 17 + 7));
-    return list.take(6).toList();
-  }
 
-  /// 常用汉字库（用于干扰字补充）
-  static const _commonHanzi = '的一是不了人我在有他这中大来上国个到说们为子和你地出道也时年得就那要下以生会自着去之过家学对可她里后小么心多天而能好都然没日于起还发成事只作当想看文无开手十用主行方又如前所本见经头面公同三已老从动两长知民样现分将外但身些与高意进法此月正儿世正那点美门因四果度情代五马先名或金声达再增及特解百各交权较论几克区往便做价完半并象拉精她图反受约效层配许由省报兰联术求信治原每转议久直基复带东空西保';
+    // 随机抽取 6 个不重复的字
+    final pool = sentenceChars.toList()..shuffle(random);
+    final candidates = pool.take(6).toList();
 
-  /// 从常用汉字中获取干扰字
-  List<String> _getCommonChineseChars(Set<String> exclude) {
-    final list = _commonHanzi.characters.where((ch) => !exclude.contains(ch)).toList();
-    list.shuffle(Random(_activeSentenceIndex * 13 + 5));
-    return list.take(6).toList();
+    // 如果正确答案不在其中，随机替换一个位置
+    if (mustHave.isNotEmpty && !candidates.contains(mustHave)) {
+      final replacePos = random.nextInt(candidates.length);
+      candidates[replacePos] = mustHave;
+    }
+
+    _candidateChars = candidates;
   }
 
   // ---------------- 交互 ----------------
