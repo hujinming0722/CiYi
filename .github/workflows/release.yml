@@ -29,6 +29,8 @@ jobs:
         run: flutter pub get
 
       - name: Build APK
+        env:
+          JAVA_HOME: ${{ env.JAVA_HOME }}
         run: flutter build apk --release
 
       - name: Get version
